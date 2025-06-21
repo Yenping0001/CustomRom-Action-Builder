@@ -14,15 +14,17 @@ jobs:
 
     - name: Install dependencies
       run: |
+        df -h /
         sudo apt update
         sudo apt install -y openjdk-11-jdk bc bison build-essential curl flex git gnupg gperf \
           libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush repo rsync \
           schedtool squashfs-tools xsltproc zip unzip zlib1g-dev ccache git-lfs
+        
 
     - name: Set Git config and add repo tool
       run: |
-        git config --global user.name "Chronix-AOSP"
-        git config --global user.email "phoniexpaul88@gmail.com"
+        git config --global user.name "${{ secrets.GIT_USERNAME }}"
+        git config --global user.email "${{ secrets.GIT_EMAIL }}"
         mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod +x ~/bin/repo
@@ -58,7 +60,7 @@ jobs:
         export USE_CCACHE=1
         ccache -M 50G
         source build/envsetup.sh
-        lunch goafterlife violet
+        goafterlife violet
 
     - name: Start build
       run: |
@@ -87,7 +89,7 @@ jobs:
       run: |
         END_TIME=$(date +%s)
         DURATION=$(( (END_TIME - START_TIME) / 60 ))
-        curl -s -X POST "https://api.telegram.org/bot8143430552:AAFo0AZzkNSKNDfhEPEiWoxzBDlb4lFXIwI/sendMessage" \
-          -d chat_id="1556227024" \
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+          -d chat_id="${{ secrets.TG_CHAT_ID }}" \
           -d text="❌ AfterlifeOS build for *Violet* failed.\n🕒 Duration: *$DURATION minutes*\nCheck the GitHub Actions logs." \
           -d parse_mode="Markdown"
