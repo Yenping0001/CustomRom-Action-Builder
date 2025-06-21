@@ -88,7 +88,7 @@ That's it! The workflow will now post all build results to your channel.
 | Field              | Value                                                           |
 |-------------------|------------------------------------------------------------------|
 | ROM Name          | AfterlifeOS                                                     |
-| Manifest URL      | https://github.com/Afterlife-OS/android_manifest.git            |
+| Manifest URL      | https://github.com/AfterlifeOS/android_manifest.git            |
 | Manifest Branch   | 14                                                              |
 | Device Codename   | violet                                                          |
 | Device Name       | Redmi Note 7 Pro                                                |
