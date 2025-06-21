@@ -1,0 +1,93 @@
+name: Build AfterlifeOS for Violet
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: AfterlifeOS Build for Violet
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout this repo
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y openjdk-11-jdk bc bison build-essential curl flex git gnupg gperf \
+          libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush repo rsync \
+          schedtool squashfs-tools xsltproc zip unzip zlib1g-dev ccache
+
+    - name: Set Git config and add repo tool
+      run: |
+        git config --global user.name "Chronix-AOSP"
+        git config --global user.email "phoniexpaul88@gmail.com"
+        mkdir -p ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod +x ~/bin/repo
+        echo "$HOME/bin" >> $GITHUB_PATH
+
+    - name: Send Telegram Notification - Build Started
+      run: |
+        START_TIME=$(date +%s)
+        echo "START_TIME=$START_TIME" >> $GITHUB_ENV
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+          -d chat_id="${{ secrets.TG_CHAT_ID }}" \
+          -d text="🚧 Starting AfterlifeOS *Violet* build...\nThis may take a while ⏳" \
+          -d parse_mode="Markdown"
+
+    - name: Initialize AfterlifeOS repo
+      run: |
+        mkdir rom && cd rom
+        repo init -u https://github.com/Afterlife-OS/manifest.git -b fourteen --depth=1
+        repo sync -c --no-tags --no-clone-bundle -j$(nproc --all)
+
+    - name: Clone device tree, vendor, kernel
+      run: |
+        cd rom
+        git clone https://github.com/ChroniX-AOSP/platform_device_xiaomi_violet.git device/xiaomi/violet
+        git clone https://github.com/ChroniX-AOSP/platform_vendor_xiaomi_violet.git vendor/xiaomi/violet
+        git clone https://github.com/ChroniX-AOSP/platform_kernel_xiaomi_violet.git -b surukuu-1.1 kernel/xiaomi/violet
+
+    - name: Prepare for build
+      run: |
+        cd rom
+        export ALLOW_MISSING_DEPENDENCIES=true
+        export CCACHE_EXEC=$(which ccache)
+        export USE_CCACHE=1
+        ccache -M 50G
+        source build/envsetup.sh
+        lunch goafterlife violet
+
+    - name: Start build
+      run: |
+        cd rom
+        mka bacon -j$(nproc --all)
+
+    - name: Upload ROM to Telegram (Success)
+      if: success()
+      run: |
+        END_TIME=$(date +%s)
+        DURATION=$(( (END_TIME - START_TIME) / 60 ))
+
+        cd rom/out/target/product/violet
+        FILE=$(ls *.zip | head -n 1)
+        SIZE=$(du -h "$FILE" | cut -f1)
+        MD5=$(md5sum "$FILE" | cut -d ' ' -f1)
+
+        curl -F document=@"$FILE" \
+             -F chat_id="${{ secrets.TG_CHAT_ID }}" \
+             -F caption="✅ *AfterlifeOS Build Complete* for *Violet* 📱\n\n📦 File: *$FILE*\n🧩 Size: *$SIZE*\n🔐 MD5: \`$MD5\`\n🕒 Duration: *$DURATION minutes*\n\nUploaded via GitHub Actions." \
+             -F parse_mode="Markdown" \
+             https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendDocument
+
+    - name: Send Telegram Notification - Failure
+      if: failure()
+      run: |
+        END_TIME=$(date +%s)
+        DURATION=$(( (END_TIME - START_TIME) / 60 ))
+        curl -s -X POST "https://api.telegram.org/bot8143430552:AAFo0AZzkNSKNDfhEPEiWoxzBDlb4lFXIwI/sendMessage" \
+          -d chat_id="1556227024" \
+          -d text="❌ AfterlifeOS build for *Violet* failed.\n🕒 Duration: *$DURATION minutes*\nCheck the GitHub Actions logs." \
+          -d parse_mode="Markdown"
