@@ -17,7 +17,7 @@ jobs:
         sudo apt update
         sudo apt install -y openjdk-11-jdk bc bison build-essential curl flex git gnupg gperf \
           libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush repo rsync \
-          schedtool squashfs-tools xsltproc zip unzip zlib1g-dev ccache
+          schedtool squashfs-tools xsltproc zip unzip zlib1g-dev ccache git-lfs
 
     - name: Set Git config and add repo tool
       run: |
@@ -40,7 +40,7 @@ jobs:
     - name: Initialize AfterlifeOS repo
       run: |
         mkdir rom && cd rom
-        repo init -u https://github.com/Afterlife-OS/manifest.git -b fourteen --depth=1
+        repo init --depth=1 -u https://github.com/AfterlifeOS/android_manifest.git -b 14 --git-lfs
         repo sync -c --no-tags --no-clone-bundle -j$(nproc --all)
 
     - name: Clone device tree, vendor, kernel
