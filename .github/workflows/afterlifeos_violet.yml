@@ -16,9 +16,10 @@ jobs:
       run: |
         df -h /
         sudo apt update
-        sudo apt install -y openjdk-11-jdk bc bison build-essential curl flex git gnupg gperf \
+        sudo apt install -y openjdk-11-jdk bc bison build-essential curl flex git gnupg gperf neofetch \
           libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush repo rsync \
           schedtool squashfs-tools xsltproc zip unzip zlib1g-dev ccache git-lfs
+         neofetch
         
 
     - name: Set Git config and add repo tool
