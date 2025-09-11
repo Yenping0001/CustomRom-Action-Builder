@@ -1,4 +1,4 @@
-name: Build Evolution X
+name: Build Porject Infinity X
 
 on:
   workflow_dispatch:
@@ -28,8 +28,8 @@ jobs:
     - name: Initialize repo and sync Evolution X sources
       run: |
         mkdir -p ~/rom && cd ~/rom
-        repo init -u https://github.com/Evolution-X/manifest -b bka
-        repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+        repo init --no-repo-verify --git-lfs -u https://github.com/ProjectInfinity-X/manifest -b 16 -g default,-mips,-darwin,-notdefault
+        repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all)
         
     - name: Clone device, kernel, and vendor trees
       run: |
