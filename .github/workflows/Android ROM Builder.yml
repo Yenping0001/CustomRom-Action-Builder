@@ -51,7 +51,7 @@ jobs:
         make bacon $MAKE_THREADS
 
     - name: Upload ROM artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: EvolutionX-ROM
         path: ~/rom/out/target/product/$DEVICE_CODENAME/*.zip
