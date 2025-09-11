@@ -28,9 +28,9 @@ jobs:
     - name: Initialize repo and sync Evolution X sources
       run: |
         mkdir -p ~/rom && cd ~/rom
-        repo init -u https://github.com/Evolution-X/manifest -b thirteen
-        repo sync -c --force-sync --no-tags --no-clone-bundle -j$(nproc)
-
+        repo init -u https://github.com/Evolution-X/manifest -b bka
+        repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+        
     - name: Clone device, kernel, and vendor trees
       run: |
         cd ~/rom
