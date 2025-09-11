@@ -23,6 +23,26 @@ on:
         description: 'The URL of the ROM source repository'
         required: true
         default: 'https://github.com/LineageOS/android.git'
+      device_vendor:
+        description: 'The device vendor name (e.g., "xiaomi")'
+        required: true
+        default: 'xiaomi'
+      device_tree_repo:
+        description: 'The URL of the device tree repository'
+        required: true
+        default: 'https://github.com/LineageOS/android_device_xiaomi_surya.git'
+      device_tree_branch:
+        description: 'The branch of the device tree'
+        required: true
+        default: 'lineage-20'
+      vendor_repo:
+        description: 'The URL of the vendor repository'
+        required: true
+        default: 'https://github.com/LineageOS/android_vendor_xiaomi_surya.git'
+      vendor_branch:
+        description: 'The branch of the vendor source'
+        required: true
+        default: 'lineage-20'
 
 jobs:
   build:
@@ -67,6 +87,16 @@ jobs:
         run: |
           repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
+      - name: Clone Device Tree
+        # The device tree is essential for the build and needs to be placed in the correct directory.
+        run: |
+          git clone --depth=1 ${{ inputs.device_tree_repo }} -b ${{ inputs.device_tree_branch }} device/${{ inputs.device_vendor }}/${{ inputs.device_codename }}
+
+      - name: Clone Vendor Source
+        # The vendor source contains proprietary files required for the build.
+        run: |
+          git clone --depth=1 ${{ inputs.vendor_repo }} -b ${{ inputs.vendor_branch }} vendor/${{ inputs.device_vendor }}/${{ inputs.device_codename }}
+          
       - name: Set up ccache
         run: |
           export CCACHE_DIR=/home/runner/.ccache
