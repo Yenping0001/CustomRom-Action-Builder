@@ -1,58 +1,57 @@
-name: Build Porject Infinity X
+name: Build Project Infinity X
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     env:
-      DEVICE_CODENAME: a32x
-      LUNCH_TARGET: evolution_a32x-userdebug
-      BUILD_TYPE: userdebug
-      CCACHE_DIR: /home/runner/ccache
-      MAKE_THREADS: -j$(nproc)
+      DEVICE: a32x
+      KERNEL: mt6833
+      MANIFEST_BRANCH: main
 
     steps:
     - name: Checkout manifest
       uses: actions/checkout@v3
 
-    - name: Install dependencies
+    - name: Setup build environment
       run: |
         sudo apt update
-        sudo apt install -y bc bison build-essential curl flex git gnupg gperf libncurses5-dev \
-          libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools \
-          xsltproc zip zlib1g-dev openjdk-11-jdk repo ccache
+        sudo apt install -y repo git curl python3 unzip bc
 
-    - name: Initialize repo and sync Evolution X sources
+    - name: Initialize and sync repo
       run: |
-        mkdir -p ~/rom && cd ~/rom
-        repo init
-        repo init --no-repo-verify --git-lfs -u https://github.com/ProjectInfinity-X/manifest -b 16 -g default,-mips,-darwin,-notdefault
-        repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all)
-        
+        repo init -u https://github.com/InfinityX/manifest.git -b $MANIFEST_BRANCH
+        repo sync -c --no-tags --no-clone-bundle -j$(nproc)
+
     - name: Clone device, kernel, and vendor trees
       run: |
-        cd ~/rom
-        git clone https://github.com/Yenping0001/android_device_samsung_a32x.git device/samsung/a32x
-        git clone https://github.com/Yenping0001/android_kernel_samsung_a32x.git kernel/samsung/a32x
-        git clone https://github.com/Yenping0001/vendor_samsung_a32x.git vendor/samsung/a32x
+        git clone https://github.com/Yenping0001/android_device_samsung_a32x.git device/samsung/${DEVICE}
+        git clone https://github.com/Yenping0001/android_kernel_samsung_a32x.git kernel/samsung/${KERNEL}
+        git clone https://github.com/Yenping0001/vendor_samsung_a32x.git vendor/samsung/${DEVICE}
 
-    - name: Setup ccache
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-
+
+    - name: Build Project Infinity X
       run: |
         export USE_CCACHE=1
         ccache -M 50G
-
-    - name: Lunch and build
-      run: |
-        cd ~/rom
         source build/envsetup.sh
-        lunch $LUNCH_TARGET
-        make bacon $MAKE_THREADS
+        lunch infinityx_${DEVICE}-userdebug
+        make -j$(nproc)
 
-    - name: Upload ROM artifact
+    - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: EvolutionX-ROM
-        path: ~/rom/out/target/product/$DEVICE_CODENAME/*.zip
+        name: InfinityX-ROM
+        path: out/target/product/${DEVICE}/*.zip
