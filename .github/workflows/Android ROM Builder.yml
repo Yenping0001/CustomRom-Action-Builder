@@ -1,5 +1,10 @@
-name: Android ROM Build 
+# This workflow automates the building of an Android Custom ROM.
+# It is triggered manually via the GitHub Actions UI.
 
+name: Android ROM Build
+
+# The workflow will be triggered manually from the "Actions" tab in your repository.
+on:
   workflow_dispatch:
     inputs:
       rom_branch:
@@ -75,9 +80,8 @@ jobs:
           mka bacon -j$(nproc --all)
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.device_codename }}-rom
           path: out/target/product/${{ inputs.device_codename }}/*.zip
           retention-days: 7
-          
