@@ -1,57 +1,83 @@
-name: Build Project Infinity X
+name: Android ROM Build 
 
-on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
+    inputs:
+      rom_branch:
+        description: 'The branch of the ROM source to build (e.g., "lineage-20")'
+        required: true
+        default: 'lineage-20'
+      device_codename:
+        description: 'The device codename (e.g., "surya")'
+        required: true
+        default: 'surya'
+      lunch_combo:
+        description: 'The lunch combo to use (e.g., "lineage_surya-userdebug")'
+        required: true
+        default: 'lineage_surya-userdebug'
+      rom_repo:
+        description: 'The URL of the ROM source repository'
+        required: true
+        default: 'https://github.com/LineageOS/android.git'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    env:
-      DEVICE: a32x
-      KERNEL: mt6833
-      MANIFEST_BRANCH: main
-
+    
     steps:
-    - name: Checkout manifest
-      uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Setup build environment
-      run: |
-        sudo apt update
-        sudo apt install -y repo git curl python3 unzip bc
+      - name: Set up Build Environment
+        # The build process requires a lot of memory, so we'll increase the swap space.
+        run: |
+          sudo swapoff -a
+          sudo fallocate -l 16G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          df -h
+          free -h
+          
+          # Install essential build packages.
+          sudo apt-get update
+          sudo apt-get install -y git-lfs git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libxml2-utils xsltproc libxml2-dev libtinfo5 libncurses5 liblz4-tool lz4 imagemagick ccache schedtool libssl-dev python3.10 python3-pip openjdk-11-jdk
 
-    - name: Initialize and sync repo
-      run: |
-        repo init -u https://github.com/InfinityX/manifest.git -b $MANIFEST_BRANCH
-        repo sync -c --no-tags --no-clone-bundle -j$(nproc)
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+      - name: Install Repo
+        run: |
+          mkdir -p ~/.bin
+          curl -s 'https://storage.googleapis.com/git-repo-downloads/repo' > ~/.bin/repo
+          chmod a+x ~/.bin/repo
+          PATH=~/.bin:$PATH
+          
+      - name: Initialize Repo
+        run: |
+          repo init -u ${{ inputs.rom_repo }} -b ${{ inputs.rom_branch }} --git-lfs --depth=1
+          
+      - name: Sync Source Code
+        run: |
+          repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
-    - name: Clone device, kernel, and vendor trees
-      run: |
-        git clone https://github.com/Yenping0001/android_device_samsung_a32x.git device/samsung/${DEVICE}
-        git clone https://github.com/Yenping0001/android_kernel_samsung_a32x.git kernel/samsung/${KERNEL}
-        git clone https://github.com/Yenping0001/vendor_samsung_a32x.git vendor/samsung/${DEVICE}
+      - name: Set up ccache
+        run: |
+          export CCACHE_DIR=/home/runner/.ccache
+          export USE_CCACHE=1
+          ccache -M 50G
+          
+      - name: Build ROM
+        run: |
+          source build/envsetup.sh
+          lunch ${{ inputs.lunch_combo }}
+          mka bacon -j$(nproc --all)
 
-    - name: Cache ccache
-      uses: actions/cache@v4
-      with:
-        path: ~/.ccache
-        key: ccache-${{ runner.os }}-${{ github.sha }}
-        restore-keys: |
-          ccache-${{ runner.os }}-
-
-    - name: Build Project Infinity X
-      run: |
-        export USE_CCACHE=1
-        ccache -M 50G
-        source build/envsetup.sh
-        lunch infinityx_${DEVICE}-userdebug
-        make -j$(nproc)
-
-    - name: Upload build artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: InfinityX-ROM
-        path: out/target/product/${DEVICE}/*.zip
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ inputs.device_codename }}-rom
+          path: out/target/product/${{ inputs.device_codename }}/*.zip
+          retention-days: 7
+          
