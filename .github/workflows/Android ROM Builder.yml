@@ -2,8 +2,7 @@ name: Android ROM Builder
 
 on:
   workflow_dispatch:
-
-  inputs:
+   inputs:
       rom_name:
         description: 'ROM Name (e.g. RisingOS, AfterlifeOS)'
         required: true
