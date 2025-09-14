@@ -1,40 +1,161 @@
-name: Build Custom ROM
+name: Android ROM Builder
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
+
+  
+    inputs:
+      rom_name:
+        description: 'ROM Name (e.g. RisingOS, AfterlifeOS)'
+        required: true
+        default: 'AfterlifeOS'
+      manifest_url:
+        description: 'Manifest Git URL'
+        required: true
+        default: 'https://github.com/AfterlifeOS/android_manifest.git'
+      manifest_branch:
+        description: 'Manifest Branch (e.g. fourteen)'
+        required: true
+        default: '14'
+      device_codename:
+        description: 'Device Codename (e.g. violet, sweet, RMX3031)'
+        required: true
+        default: 'violet'
+      device_name:
+        description: 'Device Name (e.g. Redmi Note 7 Pro, Realme X7 Max)'
+        required: true
+        default: 'Redmi Note 7 Pro'
+      lunch_combo:
+        description: 'Lunch Combo (e.g. lunch lineage_violet-userdebug)'
+        required: true
+        default: 'goafterlife violet-userdebug'
+      device_tree:
+        description: 'Device Tree Git URL'
+        required: true
+        default: 'https://github.com/ChroniX-AOSP/platform_device_xiaomi_violet.git'
+      vendor_tree:
+        description: 'Vendor Tree Git URL'
+        required: true
+        default: 'https://github.com/ChroniX-AOSP/platform_vendor_xiaomi_violet.git'
+      kernel_tree:
+        description: 'Kernel Tree Git URL'
+        required: true
+        default: 'https://github.com/ChroniX-AOSP/platform_kernel_xiaomi_violet.git -b surukuu-1.1'
 
 jobs:
   build:
     name: Build ROM
     runs-on: ubuntu-latest
 
-    env:
-      ROM_NAME: Porject Infinity X
-      DEVICE_CODENAME: a32x
-      BUILD_TYPE: userdebug
-      TZ: Asia/Taipei
-
     steps:
-    - name: ⏱️ Set up build environment
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Dependencies
       run: |
         sudo apt update
-        sudo apt install -y bc bison build-essential curl flex git gnupg gperf libncurses5-dev \
-          libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools \
-          xsltproc zip zlib1g-dev openjdk-11-jdk
+        sudo apt install -y openjdk-11-jdk bc bison build-essential curl flex git gnupg gperf \
+        libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush repo rsync \
+        schedtool squashfs-tools xsltproc zip unzip zlib1g-dev ccache
 
-    - name: 🧹 Clean workspace
+    - name: Setup Git & Repo
       run: |
-        rm -rf ~/rom
-        mkdir -p ~/rom
-        cd ~/rom
+        git config --global user.name "${{ secrets.GIT_USERNAME }}"
+        git config --global user.email "${{ secrets.GIT_EMAIL }}"
+        mkdir -p ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod +x ~/bin/repo
+        echo "$HOME/bin" >> $GITHUB_PATH
 
-    - name: 📥 Clone ROM source
+    - name: Notify Telegram - Build Started
       run: |
-        repo init --depth=1 --no-repo-verify --git-lfs -u https://github.com/ProjectInfinity-X/manifest -b 16 -g default,-mips,-darwin,-notdefault
-        repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all)
+        START_TIME=$(date +%s)
+        echo "START_TIME=$START_TIME" >> $GITHUB_ENV
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+        -d chat_id="${{ secrets.TG_CHAT_ID }}" \
+        -d text="🚀 *Starting Build: ${{ github.event.inputs.rom_name }}*\n━━━━━━━━━━━━━━━━━━━━\n\
+📱 *Device:* `${{ github.event.inputs.device_codename }}` ( ${{ github.event.inputs.device_name }} )\n\
+⚙️ *Variant:* `${{ github.event.inputs.lunch_combo }}`\n🕒 Time: $(date -u +%Y-%m-%d\ %H:%M UTC)\n━━━━━━━━━━━━━━━━━━━━\n\
+🔧 *Status:* Compilation started via GitHub Actions..." \
+        -d parse_mode="Markdown"
+
+    - name: Initialize Repo
+      run: |
+        mkdir rom && cd rom
+        repo init -u ${{ github.event.inputs.manifest_url }} -b ${{ github.event.inputs.manifest_branch }} --depth=1
+        repo sync -c --no-tags --no-clone-bundle -j$(nproc)
+
+    - name: Clone Device Trees
+      run: |
+        cd rom
+        git clone ${{ github.event.inputs.device_tree }} device/${{ github.event.inputs.device_codename }}
+        git clone ${{ github.event.inputs.vendor_tree }} vendor/${{ github.event.inputs.device_codename }}
+        git clone ${{ github.event.inputs.kernel_tree }} kernel/${{ github.event.inputs.device_codename }}
+
+    - name: Generate Changelog
+      run: |
+        cd rom
+        echo "📜 Changelog (last 7 days):" > changelog.txt
+        END_DATE=$(date -u +%Y-%m-%d)
+        START_DATE=$(date -u -d "-7 days" +%Y-%m-%d)
+        for dir in $(find . -maxdepth 2 -type d -name ".git" | sed 's/\/.git//'); do
+          cd "$dir"
+          echo -e "\n🔧 $(basename $(git rev-parse --show-toplevel)):" >> ../../changelog.txt
+          git log --since=$START_DATE --until=$END_DATE --pretty=format:"• %s [%an]" >> ../../changelog.txt || echo "No commits"
+          cd - > /dev/null
+        done
+        cd ..
+
+    - name: Build ROM
+      run: |
+        cd rom
+        export ALLOW_MISSING_DEPENDENCIES=true
+        export CCACHE_EXEC=$(which ccache)
+        export USE_CCACHE=1
+        ccache -M 50G
+        source build/envsetup.sh
+        ${{ github.event.inputs.lunch_combo }}
+        mka bacon -j$(nproc)
+
+    - name: Upload to Telegram - Success
+      if: success()
+      run: |
+        END_TIME=$(date +%s)
+        DURATION=$(( (END_TIME - START_TIME) / 60 ))
+        cd rom/out/target/product/${{ github.event.inputs.device_codename }}
+        FILE=$(ls *.zip | head -n 1)
+        SIZE=$(du -h "$FILE" | cut -f1)
+        MD5=$(md5sum "$FILE" | cut -d ' ' -f1)
+        CHANGELOG=$(tail -n 60 ../../../../changelog.txt | sed 's/`/\\`/g' | head -c 3000)
+
+        curl -F document=@"$FILE" \
+             -F chat_id="${{ secrets.TG_CHAT_ID }}" \
+             -F caption="🎯 *${{ github.event.inputs.rom_name }} Build Summary*\n━━━━━━━━━━━━━━━━━━━━\n\
+🏷️ *ROM:* `${{ github.event.inputs.rom_name }}`\n\
+📱 *Device:* `${{ github.event.inputs.device_codename }}` ( ${{ github.event.inputs.device_name }} )\n\
+⚙️ *Variant:* `${{ github.event.inputs.lunch_combo }}`\n\
+📦 *Filename:* \`$FILE\`\n\
+🧩 *Size:* \`$SIZE\`\n\
+🔐 *MD5:* \`$MD5\`\n\
+⏱️ *Build Time:* \`$DURATION minutes\`\n━━━━━━━━━━━━━━━━━━━━\n\
+📝 *Changelog (Last 7 Days)*\n$CHANGELOG\n━━━━━━━━━━━━━━━━━━━━\n\
+✅ *Status:* Build completed successfully via GitHub Actions" \
+             -F parse_mode="Markdown" \
+             https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendDocument
+
+    - name: Notify Telegram - Build Failed
+      if: failure()
+      run: |
+        END_TIME=$(date +%s)
+        DURATION=$(( (END_TIME - START_TIME) / 60 ))
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+        -d chat_id="${{ secrets.TG_CHAT_ID }}" \
+        -d text="❌ *${{ github.event.inputs.rom_name }} Build Failed*\n━━━━━━━━━━━━━━━━━━━━\n\
+📱 *Device:* `${{ github.event.inputs.device_codename }}` ( ${{ github.event.inputs.device_name }} )\n\
+⚙️ *Variant:* `${{ github.event.inputs.lunch_combo }}`\n\
+⏱️ *Duration:* \`$DURATION minutes\`\n━━━━━━━━━━━━━━━━━━━━\n\
+💥 *Error:* Check GitHub Actions logs for details." \
+        -d parse_mode="Markdown"        repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j$(nproc --all)
         
     - name: 📦 Clone device, vendor, kernel trees
       run: |
